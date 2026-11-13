@@ -1,5 +1,7 @@
 use super::{Game, Hit};
 
+pub(super) const ID: &str = "clickthrough";
+
 pub(super) fn target(game: &Game<'_>, entity: bool) -> Option<Hit> {
     let (eye, direction) = game.aim()?;
     let (marker, face, point) = if entity {

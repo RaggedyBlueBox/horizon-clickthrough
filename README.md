@@ -8,9 +8,10 @@ This version always targets containers. It has no settings screen or original si
 
 ## Install
 
-1. Download `clickthrough-0.1.0.hnmod` from Releases.
+1. Download `clickthrough-0.1.1.hnmod` from Releases.
 2. Put it in `horizon-native-mods/` in the selected Horizon instance's game folder. Add `mod.clickthrough:true` to that instance's `horizon-mods.txt`.
 3. In Horizon Launcher, build the instance's native mods, then play the resulting build.
+4. In Options → Mods, select ClickThrough to toggle it.
 
 This release targets Horizon 26.3 Nightly 2026-11-13 (`9f42064`). The launcher compiles the Rust code into the client. The source uses Horizon's normal local and multiplayer block interaction paths.
 

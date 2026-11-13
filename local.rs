@@ -3,7 +3,8 @@ fn clickthrough_local(
 ) -> std::ops::ControlFlow<Result<Option<Hand>>> {
     use std::ops::ControlFlow::{Break, Continue};
 
-    if game.guest_use.is_some()
+    if !game.native_on(super::clickthrough::ID)
+        || game.guest_use.is_some()
         || game.spectator()
         || game.keys.held(Mapping::Sneak)
         || (game.riding.is_some()

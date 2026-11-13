@@ -1,10 +1,11 @@
 fn clickthrough_remote(game: &mut crate::game::Game<'_>) -> std::ops::ControlFlow<()> {
     use std::ops::ControlFlow::{Break, Continue};
 
-    if game
-        .remote
-        .as_ref()
-        .is_some_and(|remote| remote.is_destroying)
+    if !game.native_on(super::clickthrough::ID)
+        || game
+            .remote
+            .as_ref()
+            .is_some_and(|remote| remote.is_destroying)
         || game.hands_busy()
         || game.spectator()
         || game.remote_shift_down()
