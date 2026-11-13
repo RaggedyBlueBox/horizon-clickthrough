@@ -1,0 +1,29 @@
+[mod]
+id = "clickthrough"
+version = "0.1.0"
+priority = 100
+
+[compatibility]
+horizon_revision = "9f42064c11efe7ef3e5ed2baad7ddc2a3b36eea0"
+
+[[module]]
+id = "target"
+file = "crates/horizon-client/src/game.rs"
+name = "clickthrough"
+source = "target.rs"
+
+[[injection]]
+id = "local-use"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::item_actions::Game<'_>::use_item_as_player"
+helper = "local.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]
+
+[[injection]]
+id = "remote-use"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::remote::Game<'_>::remote_use"
+helper = "remote.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }]
