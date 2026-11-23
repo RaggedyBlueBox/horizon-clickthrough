@@ -1,25 +1,41 @@
 //! ClickThrough as a sandboxed WebAssembly mod.
 //!
-//! Right-click an item frame, wall sign, wall hanging sign, or wall banner
-//! attached to a container to open the container, on either logical side:
-//! the server hook cancels the marker's own use and opens the container's
-//! menu for the clicking player instead. Hold Sneak to use the marker
-//! normally. Only Survival and Creative players are redirected.
+//! Right-click a wall sign, wall hanging sign, or wall banner attached to a
+//! container to open the container, on either logical side: the server hook
+//! cancels the marker's own use and opens the container's menu for the
+//! clicking player instead. Hold your Sneak key to use the marker normally.
+//! Only Survival and Creative players are redirected.
 //!
-//! Before opening, the server replays the checks a direct use of the
-//! container would run: the marker and the container are both sensibly
-//! reachable (outline ray hits that skip only the marker), the player may
-//! use both blocks, the container sits inside the world border, and a chest
-//! is not blocked from above. Anything else falls through to vanilla.
+//! Before opening, the server replays a direct use's checks against the
+//! destination container itself: an outline ray must reach the marker, then
+//! a second ray from just past the marker must hit the container (a marker
+//! hit never counts as the destination hit), the player must be within
+//! vanilla reach and may use both blocks, the container must sit inside the
+//! world border, and a chest with a redstone conductor above it stays shut.
+//! Anything the mod cannot verify falls through to vanilla.
+//!
+//! Item frames are deliberately not redirected: the entity hook carries no
+//! player handle and the mod API exposes no way to resolve the clicking
+//! player's eye position on that path, so the destination ray the container
+//! requires cannot be built. Frame clicks keep vanilla behavior.
 use mod_api::{
-    self, BlockFace, ClipBlock, ClipFluid, EntityInteractSpecificEvent, Flow, GameMode, Hand,
-    HostSide, Hooks, InteractionResult, LevelRef, PlayerRef, RightClickBlockEvent, ServerHost,
-    TriState,
+    self, BlockFace, ClipBlock, ClipFluid, Flow, GameMode, Hand, HostSide, Hooks, InteractionResult,
+    LevelRef, PlayerRef, RightClickBlockEvent, ServerHost, TriState,
 };
 
 /// Ray length for the validation rays: past any legitimate interaction, so
 /// only the hit conditions can refuse.
 const RAY_LENGTH: f64 = 8.0;
+
+/// Reach mirroring the engine's own use validation: 5.0 in Creative, 4.5
+/// otherwise, plus the engine's own 1.0 tolerance.
+fn reach_for(game_mode: Option<GameMode>) -> f64 {
+    if game_mode == Some(GameMode::Creative) {
+        5.0 + 1.0
+    } else {
+        4.5 + 1.0
+    }
+}
 
 #[derive(Default)]
 struct Mod;
@@ -71,59 +87,6 @@ impl Hooks for Mod {
         *event.cancellation_result = InteractionResult::Fail;
         Flow::Cancel
     }
-
-    fn entity_interact_specific(
-        &self,
-        host: &mut dyn ServerHost,
-        event: &mut EntityInteractSpecificEvent<'_>,
-    ) -> Flow {
-        if !matches!(
-            event.kind,
-            "minecraft:item_frame" | "minecraft:glow_item_frame"
-        ) {
-            return Flow::Continue;
-        }
-        let Some(player) = host.players().acting_player() else {
-            return Flow::Continue;
-        };
-        if !player_clear(host, player) {
-            return Flow::Continue;
-        }
-        let Some(level) = player.level(host) else {
-            return Flow::Continue;
-        };
-        let Ok(id) = u32::try_from(event.entity) else {
-            return Flow::Continue;
-        };
-        let Some(frame) = host.entity(id) else {
-            return Flow::Continue;
-        };
-        let Some(frame_pos) = frame.block_position(host) else {
-            return Flow::Continue;
-        };
-        let Some(facing) = frame.hanging_direction(host) else {
-            return Flow::Continue;
-        };
-        let normal = facing.normal();
-        let container = [
-            frame_pos[0] - normal[0],
-            frame_pos[1] - normal[1],
-            frame_pos[2] - normal[2],
-        ];
-        if !is_container_at(host, level, container) {
-            return Flow::Continue;
-        }
-        if !frame_destination_clear(host, level, player, container, normal, event.stack) {
-            return Flow::Continue;
-        }
-        let Some(entity) = host.block_entity(level, container) else {
-            return Flow::Continue;
-        };
-        if player.open_menu(host, entity) != Ok(true) {
-            return Flow::Continue;
-        }
-        Flow::Cancel
-    }
 }
 
 /// Whether the mod redirects this player's clicks: Survival and Creative
@@ -171,10 +134,13 @@ fn is_container_at(host: &dyn ServerHost, level: LevelRef, pos: [i32; 3]) -> boo
 }
 
 /// The full destination validation for a marker click: the marker is hit
-/// through a clear outline ray, the container is hit through a ray that may
-/// pass only the marker, neither ray leaves the world border, the player may
-/// use both blocks, and a chest is not blocked from above. Anything the mod
-/// cannot verify falls through to vanilla.
+/// through a clear outline ray, then a second ray starting just past the
+/// marker must hit the container itself (a marker hit never counts), the
+/// player is within vanilla reach of the destination, may use both blocks
+/// (held stack or empty hand alike), the container sits inside the world
+/// border, and a chest with a redstone conductor above it stays shut.
+/// Anything the mod cannot verify falls through to vanilla.
+#[allow(clippy::too_many_arguments)]
 fn destination_clear(
     host: &mut dyn ServerHost,
     level: LevelRef,
@@ -195,41 +161,58 @@ fn destination_clear(
     else {
         return false;
     };
+    let reach = reach_for(player.game_mode(host));
     // The marker's outline is hit with nothing in between.
-    let marker_hit = level.clip(host, eye, ray_toward(eye, hit_point), ClipBlock::Outline, ClipFluid::None);
-    let Some(marker_hit) = marker_hit.filter(|hit| {
-        !hit.miss && !hit.world_border && hit.block == marker && within_reach(eye, hit.location)
-    }) else {
-        return false;
-    };
-    let _ = marker_hit;
-    // The container's outline is hit with nothing in between but the marker.
-    let container_hit = level.clip(
+    let Some(marker_hit) = level.clip(
         host,
         eye,
-        ray_toward(eye, block_center(container)),
+        ray_toward(eye, hit_point),
         ClipBlock::Outline,
         ClipFluid::None,
-    );
-    let Some(container_hit) = container_hit.filter(|hit| {
-        !hit.miss
-            && !hit.world_border
-            && (hit.block == marker || hit.block == container)
-            && within_reach(eye, hit.location)
-    }) else {
+    ) else {
         return false;
     };
-    // The normal block interaction checks, on both blocks.
-    if let Some(stack) = stack {
-        let Some(marker_face) = face_of(hit_face) else {
-            return false;
-        };
-        if player.may_use_item_at(host, marker, marker_face, stack) != Some(true) {
-            return false;
-        }
-        if player.may_use_item_at(host, container, container_hit.face, stack) != Some(true) {
-            return false;
-        }
+    if marker_hit.miss
+        || marker_hit.world_border
+        || marker_hit.block != marker
+        || !within_reach(eye, marker_hit.location, reach)
+    {
+        return false;
+    }
+    // The container's outline is hit by a ray that starts just past the
+    // marker: only the selected marker is skipped.
+    let step = unit_toward(block_center(marker), block_center(container));
+    let past_marker: [f64; 3] = [
+        block_center(marker)[0] + step[0] * 0.51,
+        block_center(marker)[1] + step[1] * 0.51,
+        block_center(marker)[2] + step[2] * 0.51,
+    ];
+    let Some(container_hit) = level.clip(
+        host,
+        past_marker,
+        ray_toward(past_marker, block_center(container)),
+        ClipBlock::Outline,
+        ClipFluid::None,
+    ) else {
+        return false;
+    };
+    if container_hit.miss
+        || container_hit.world_border
+        || container_hit.block != container
+        || !within_reach(eye, container_hit.location, reach)
+    {
+        return false;
+    }
+    // The normal block interaction checks, on both blocks, held stack or
+    // empty hand alike.
+    let Some(marker_face) = face_of(hit_face) else {
+        return false;
+    };
+    if !may_use(host, player, marker, marker_face, stack) {
+        return false;
+    }
+    if !may_use(host, player, container, container_hit.face, stack) {
+        return false;
     }
     // The container sits inside the world border.
     if let Some(border) = level.world_border(host) {
@@ -238,7 +221,10 @@ fn destination_clear(
             return false;
         }
     }
-    // A chest with a redstone conductor above it stays shut.
+    // A chest with a redstone conductor above it stays shut. (A cat sitting
+    // on the chest cannot be seen through the mod API: no entity enumeration
+    // or sitting query exists, so that case falls through to vanilla, which
+    // also refuses it.)
     if is_chest_at(host, level, container)
         && level.is_redstone_conductor(host, [container[0], container[1] + 1, container[2]])
             == Some(true)
@@ -248,38 +234,21 @@ fn destination_clear(
     true
 }
 
-/// The destination validation for a frame click. The frame itself was
-/// range-checked with the interact packet (or the client's own pick), so this
-/// covers the container: permission, border and lid, like the block path.
-fn frame_destination_clear(
-    host: &mut dyn ServerHost,
-    level: LevelRef,
+/// Whether the player may use the block at `pos` clicked on `face`: the
+/// normal interaction check, with a held stack or an empty hand (which
+/// falls back to the player's build permission, matching what an empty
+/// use checks).
+fn may_use(
+    host: &dyn ServerHost,
     player: PlayerRef,
-    container: [i32; 3],
-    facing: [i32; 3],
+    pos: [i32; 3],
+    face: BlockFace,
     stack: Option<&mod_api::ItemStack>,
 ) -> bool {
-    if let Some(stack) = stack {
-        let Some(face) = face_of(facing) else {
-            return false;
-        };
-        if player.may_use_item_at(host, container, face, stack) != Some(true) {
-            return false;
-        }
+    match stack {
+        Some(stack) => player.may_use_item_at(host, pos, face, stack) == Some(true),
+        None => player.may_build(host) == Some(true),
     }
-    if let Some(border) = level.world_border(host) {
-        let [x, _, z] = block_center(container);
-        if !(border[0] <= x && x <= border[2] && border[1] <= z && z <= border[3]) {
-            return false;
-        }
-    }
-    if is_chest_at(host, level, container)
-        && level.is_redstone_conductor(host, [container[0], container[1] + 1, container[2]])
-            == Some(true)
-    {
-        return false;
-    }
-    true
 }
 
 fn is_marker(name: &str) -> bool {
@@ -342,23 +311,27 @@ fn block_center(pos: [i32; 3]) -> [f64; 3] {
     std::array::from_fn(|axis: usize| f64::from(pos[axis]) + 0.5)
 }
 
+/// A unit step from `from` toward `at`, or zero when they coincide.
+fn unit_toward(from: [f64; 3], at: [f64; 3]) -> [f64; 3] {
+    let delta: [f64; 3] = std::array::from_fn(|axis: usize| at[axis] - from[axis]);
+    let length = delta.iter().map(|d| d * d).sum::<f64>().sqrt();
+    if length < 1e-6 {
+        return [0.0; 3];
+    }
+    std::array::from_fn(|axis: usize| delta[axis] / length)
+}
+
 /// A ray from `eye` toward `at`, long enough to reach any block the game
 /// would let the player touch.
 fn ray_toward(eye: [f64; 3], at: [f64; 3]) -> [f64; 3] {
-    let delta: [f64; 3] = std::array::from_fn(|axis: usize| at[axis] - eye[axis]);
-    let length = delta.iter().map(|d| d * d).sum::<f64>().sqrt();
-    if length < 1e-6 {
-        return eye;
-    }
-    std::array::from_fn(|axis: usize| eye[axis] + delta[axis] / length * RAY_LENGTH)
+    std::array::from_fn(|axis: usize| eye[axis] + unit_toward(eye, at)[axis] * RAY_LENGTH)
 }
 
-/// Whether `point` is within the game's own block reach of `eye`.
-fn within_reach(eye: [f64; 3], point: [f64; 3]) -> bool {
-    const REACH_SQUARED: f64 = 64.0;
+/// Whether `point` is within `reach` of `eye`.
+fn within_reach(eye: [f64; 3], point: [f64; 3], reach: f64) -> bool {
     (0..3)
         .map(|axis| eye[axis] - point[axis])
         .map(|d| d * d)
         .sum::<f64>()
-        <= REACH_SQUARED
+        <= reach * reach
 }

@@ -2,7 +2,9 @@
 
 I made this Horizon port with Codex. The [original ClickThrough](https://github.com/gbl/ClickThrough) is by Giselbaer (Guntram Blohm) and is licensed under MIT.
 
-Right-click an item frame, glow item frame, wall sign, wall hanging sign, or wall banner attached to a supported container to use the container directly. Hold your Sneak key while right-clicking to use the marker normally. Supported containers include chests, barrels, shulker boxes, hoppers, dispensers, droppers, furnaces, brewing stands, ender chests, and crafters.
+Right-click a wall sign, wall hanging sign, or wall banner attached to a supported container to use the container directly. Hold your Sneak key while right-clicking to use the marker normally. Supported containers include chests, barrels, shulker boxes, hoppers, dispensers, droppers, furnaces, brewing stands, ender chests, and crafters.
+
+Item frames keep vanilla behavior: the mod API exposes no way to resolve the clicking player's eye on the entity path, so the destination raycast the container requires cannot be built there, and unverifiable redirects are left alone.
 
 This version always targets containers. It has no settings screen or original sign-text filters. Only Survival and Creative players are redirected; spectators and adventure players keep vanilla behavior.
 
