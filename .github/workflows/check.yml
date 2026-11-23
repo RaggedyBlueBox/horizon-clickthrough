@@ -1,0 +1,20 @@
+name: check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install cargo-horizon-mod
+        run: cargo install --locked --git https://github.com/horizon-rust/horizon cargo-horizon-mod
+      - name: Build the WebAssembly mod
+        run: cargo horizon-mod build --wasm
+      - name: Verify the package
+        run: cargo horizon-mod check target/horizon-mod/clickthrough.hmod
