@@ -8,7 +8,7 @@ This version always targets containers. It has no settings screen or original si
 
 ## Install
 
-1. Download `clickthrough-0.3.0.hmod` from Releases.
+1. Download `clickthrough-0.3.1.hmod` from Releases.
 2. In the Horizon Launcher, open Mods, install the `.hmod` from file, and add it to the selected instance. (Manual install also works: copy it into the game folder's `horizon-mods/` and add `mod.clickthrough:true` to `horizon-mods.txt`.)
 3. Play. The mod is active whenever it is installed; removing it from the instance disables it. There is no Mods-menu toggle.
 
@@ -17,6 +17,10 @@ This release targets Horizon Nightly 2026-11-22 (`f1bb66f353cf67f2aa4665293fc75c
 ## Package from source
 
 Install the mod tool (`cargo install --locked --git https://github.com/horizon-rust/horizon cargo-horizon-mod`) with Rust 1.95 or newer, then run `cargo horizon-mod build --wasm`. It writes the mod to `target/horizon-mod/`. Verify with `cargo horizon-mod check target/horizon-mod/clickthrough.hmod`.
+
+## How the redirect is validated
+
+The server replays the checks a direct use of the container would run before opening its menu: the marker is hit through a clear outline ray, the container is hit through a ray that may pass only the marker, the player may use both blocks, the container sits inside the world border, and a chest with a redstone conductor above it stays shut. Anything else falls through to vanilla behavior (for example, a chest with a cat sitting on it, which the mod API cannot see).
 
 ## Differences from the native versions
 

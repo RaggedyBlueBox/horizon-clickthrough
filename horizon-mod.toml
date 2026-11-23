@@ -1,6 +1,6 @@
 id = "clickthrough"
 name = "ClickThrough"
-version = "0.3.0"
+version = "0.3.1"
 description = "Open containers through attached item frames, signs, and banners."
 authors = ["RaggedyBlueBox"]
 # A WebAssembly mod: Rust in src/, built to mod.wasm by `cargo horizon-mod build --wasm` against the SDK build Cargo.toml pins, beside data/ and assets/.
@@ -10,5 +10,5 @@ side = "both"
 capabilities = ["registries"]
 
 [wasm]
-sha512 = "ffbe9e6b328ea1a3f36fdc9a00b8eff793bd6b1634b9ff0cb44b91f6b0dcc019f826a29c09831b0a4d33d097912a8abc0eb8a0b1dd8985289ef27b26cae98818"
+sha512 = "22dad2f1a782a0bca9179512ea9a1055f10b582fb113fddb24ff3a8cb3657ea75ad9479b0d28cc67211dcc4de6f6f74b57bccac15d28bf1f825f2b4693e08bd0"
 toolchain = "1.99.1 58cf8f9c35b355199727627d07ae34a4e2846d67"
